@@ -1,0 +1,377 @@
+<Window x:Class="ShengJi.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:ShengJi.UI"
+        Title="声记" Width="360" SizeToContent="Height" ResizeMode="CanMinimize" WindowStyle="None"
+        Background="{StaticResource WinBg}" Foreground="{StaticResource Text}"
+        FontFamily="{StaticResource UiFont}" FontSize="13" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display" Icon="/Assets/app.ico" WindowStartupLocation="Manual">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="38" ResizeBorderThickness="0" GlassFrameThickness="0,0,0,1"
+                      CornerRadius="0" UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="38"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ================= 标题栏 ================= -->
+        <Grid Grid.Row="0">
+            <StackPanel Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+                <Image Source="/Assets/app.ico" Width="18" Height="18" RenderOptions.BitmapScalingMode="HighQuality"/>
+                <TextBlock Text="声记" FontWeight="SemiBold" FontSize="12.5" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                <Border x:Name="RecFlag" Background="{StaticResource Rec}" CornerRadius="3" Padding="5,1"
+                        Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed">
+                    <TextBlock Text="REC" FontSize="9.5" FontWeight="Bold" Foreground="White"/>
+                </Border>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnMini" Style="{StaticResource IconButton}" ToolTip="迷你模式"
+                        WindowChrome.IsHitTestVisibleInChrome="True" Margin="0,0,2,0">
+                    <ui:Glyph Kind="pip"/>
+                </Button>
+                <Button x:Name="BtnSettings" Style="{StaticResource IconButton}" ToolTip="设置"
+                        WindowChrome.IsHitTestVisibleInChrome="True" Margin="0,0,4,0">
+                    <ui:Glyph Kind="tune"/>
+                </Button>
+                <Button x:Name="BtnMinimize" Style="{StaticResource CaptionButton}" ToolTip="最小化"
+                        WindowChrome.IsHitTestVisibleInChrome="True">
+                    <ui:Glyph Kind="min" Width="14" Height="14" StrokeThickness="1.2"/>
+                </Button>
+                <Button x:Name="BtnClose" Style="{StaticResource CloseCaptionButton}" ToolTip="关闭"
+                        WindowChrome.IsHitTestVisibleInChrome="True">
+                    <ui:Glyph Kind="close" Width="14" Height="14" StrokeThickness="1.2"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- ================= 内容 ================= -->
+        <Grid Grid.Row="1">
+            <StackPanel x:Name="MainContent">
+
+                <!-- 状态 + 计时 -->
+                <StackPanel Margin="16,6,16,18" HorizontalAlignment="Center">
+                    <Border x:Name="Chip" CornerRadius="11" Height="22" Padding="10,0" HorizontalAlignment="Center"
+                            Background="{StaticResource Fill2}">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse x:Name="ChipDot" Width="7" Height="7" Fill="{StaticResource Text3}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="ChipText" Text="待机" FontSize="12" Margin="6,0,0,0"
+                                       Foreground="{StaticResource Text2}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock x:Name="TimerText" Text="00:00:00" FontFamily="{StaticResource NumFont}" FontWeight="Light"
+                               FontSize="46" HorizontalAlignment="Center" Margin="0,4,0,0" Foreground="#C9CED6"
+                               TextOptions.TextFormattingMode="Ideal" Typography.NumeralAlignment="Tabular"/>
+                </StackPanel>
+
+                <!-- 电脑声音 -->
+                <Border x:Name="SysCard" Style="{StaticResource Card}" Margin="12,0,12,0" Padding="12,11,12,12">
+                    <StackPanel>
+                        <DockPanel>
+                            <Border DockPanel.Dock="Left" Width="28" Height="28" CornerRadius="8" Background="{StaticResource AccentSoft}">
+                                <ui:Glyph Kind="speaker" Foreground="{StaticResource AccentText}"/>
+                            </Border>
+                            <CheckBox x:Name="SysOn" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
+                            <TextBlock Text="电脑声音" FontWeight="SemiBold" Margin="10,0" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <Button x:Name="SysPicker" Style="{StaticResource PickerButton}" Margin="0,10,0,0"/>
+                        <DockPanel x:Name="SysLevelRow" Margin="0,11,0,0">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="12,0,0,0" ToolTip="音量">
+                                <ui:Glyph Kind="vol" Width="13" Height="13" Foreground="{StaticResource Text3}" VerticalAlignment="Center"/>
+                                <Slider x:Name="SysVol" Style="{StaticResource VolumeSlider}" Width="64" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="SysVolText" Width="34" TextAlignment="Right" FontSize="11"
+                                           Foreground="{StaticResource Text2}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <ui:LevelMeter x:Name="SysMeter" Height="8" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <DockPanel x:Name="SysHint" Margin="0,9,0,0" Visibility="Collapsed">
+                            <ui:Glyph x:Name="SysHintIcon" Kind="warn" Foreground="{StaticResource WarnText}" Width="13" Height="13" VerticalAlignment="Top" Margin="0,1,0,0"/>
+                            <TextBlock x:Name="SysHintText" FontSize="11.5" Margin="6,0,0,0" TextWrapping="Wrap"/>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- 麦克风 -->
+                <Border x:Name="MicCard" Style="{StaticResource Card}" Margin="12,8,12,0" Padding="12,11,12,12">
+                    <StackPanel>
+                        <DockPanel>
+                            <Border DockPanel.Dock="Left" Width="28" Height="28" CornerRadius="8" Background="{StaticResource MicSoft}">
+                                <ui:Glyph Kind="mic" Foreground="{StaticResource MicText}"/>
+                            </Border>
+                            <CheckBox x:Name="MicOn" DockPanel.Dock="Right" Style="{StaticResource Switch}"/>
+                            <TextBlock Text="麦克风" FontWeight="SemiBold" Margin="10,0" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <Button x:Name="MicPicker" Style="{StaticResource PickerButton}" Margin="0,10,0,0"/>
+                        <DockPanel x:Name="MicLevelRow" Margin="0,11,0,0">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="12,0,0,0" ToolTip="音量">
+                                <ui:Glyph Kind="vol" Width="13" Height="13" Foreground="{StaticResource Text3}" VerticalAlignment="Center"/>
+                                <Slider x:Name="MicVol" Style="{StaticResource VolumeSlider}" Width="64" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="MicVolText" Width="34" TextAlignment="Right" FontSize="11"
+                                           Foreground="{StaticResource Text2}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <ui:LevelMeter x:Name="MicMeter" Height="8" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <DockPanel x:Name="MicHint" Margin="0,9,0,0" Visibility="Collapsed">
+                            <ui:Glyph x:Name="MicHintIcon" Kind="warn" Foreground="{StaticResource WarnText}" Width="13" Height="13" VerticalAlignment="Top" Margin="0,1,0,0"/>
+                            <TextBlock x:Name="MicHintText" FontSize="11.5" Margin="6,0,0,0" TextWrapping="Wrap"/>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- 备注 -->
+                <Border Style="{StaticResource InputBox}" Margin="12,8,12,0" Height="36">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Left" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0" Margin="0,9" Padding="10,0">
+                            <TextBlock Text="备注" FontSize="12" Foreground="{StaticResource Text3}" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBox x:Name="NoteBox" Style="{StaticResource BareTextBox}" FontSize="12.5" MaxLength="40" Margin="10,0"/>
+                    </DockPanel>
+                </Border>
+
+                <!-- 控制按钮 -->
+                <Grid Margin="28,18,28,18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="BtnPause" Style="{StaticResource CircleButton}" IsEnabled="False"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <ui:Glyph x:Name="PauseGlyph" Kind="pause"/>
+                    </Button>
+                    <Button x:Name="BtnRecord" Grid.Column="1" Style="{StaticResource BareButton}" Width="66" Height="66">
+                        <Grid>
+                            <Ellipse x:Name="RecPulse" Stroke="{StaticResource Rec}" StrokeThickness="2" Opacity="0"
+                                     RenderTransformOrigin="0.5,0.5">
+                                <Ellipse.RenderTransform>
+                                    <ScaleTransform x:Name="PulseScale" ScaleX="1" ScaleY="1"/>
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                            <Ellipse x:Name="RecRing" Stroke="#29FFFFFF" StrokeThickness="2"/>
+                            <Rectangle x:Name="RecCore" Width="50" Height="50" RadiusX="25" RadiusY="25"
+                                       Fill="{StaticResource Rec}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Rectangle.Effect>
+                                    <DropShadowEffect Color="#FF4757" BlurRadius="18" ShadowDepth="3" Opacity="0.35" Direction="270"/>
+                                </Rectangle.Effect>
+                            </Rectangle>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="BtnFolder" Grid.Column="2" Style="{StaticResource CircleButton}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="录音文件夹">
+                        <ui:Glyph Kind="folder"/>
+                    </Button>
+                </Grid>
+
+                <!-- 最近录音 -->
+                <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="8,10,8,6">
+                    <StackPanel>
+                        <DockPanel Margin="6,0,6,4">
+                            <Button x:Name="BtnAll" DockPanel.Dock="Right" Style="{StaticResource LinkButton}" FontSize="11.5" Content="全部 ›"/>
+                            <TextBlock Text="最近录音" Style="{StaticResource Caption}" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <StackPanel x:Name="RecentList"/>
+                        <TextBlock x:Name="RecentEmpty" Text="暂无录音" FontSize="11.5"
+                                   Foreground="{StaticResource Text3}" Margin="6,6,6,8" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 状态栏 -->
+                <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Background="#29000000" Height="30" Padding="12,0">
+                    <DockPanel>
+                        <TextBlock x:Name="StatusRight" DockPanel.Dock="Right" FontSize="11" Foreground="{StaticResource Text3}" VerticalAlignment="Center"/>
+                        <Button x:Name="BtnDir" Style="{StaticResource BareButton}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:Glyph Kind="folder" Width="13" Height="13" Foreground="{StaticResource Text3}"/>
+                                <TextBlock x:Name="DirText" FontSize="11" Foreground="{StaticResource Text3}" Margin="6,0,0,0"
+                                           TextTrimming="CharacterEllipsis" MaxWidth="180" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </DockPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- ================= 设置面板 ================= -->
+            <Grid x:Name="SettingsPanel" Background="{StaticResource WinBg}" VerticalAlignment="Top"
+                  Height="{Binding ActualHeight, ElementName=MainContent}" Visibility="Collapsed">
+                <Grid.RenderTransform>
+                    <TranslateTransform x:Name="SettingsShift"/>
+                </Grid.RenderTransform>
+                <DockPanel>
+                    <DockPanel DockPanel.Dock="Top" Margin="10,0,10,4">
+                        <Button x:Name="BtnSettingsBack" Style="{StaticResource IconButton}" ToolTip="返回">
+                            <ui:Glyph Kind="back"/>
+                        </Button>
+                        <TextBlock Text="设置" FontSize="15" FontWeight="SemiBold" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                    </DockPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12,0,8,12" Focusable="False">
+                        <StackPanel Margin="0,0,4,0">
+
+                            <TextBlock Text="录音" Style="{StaticResource GroupHeader}" Margin="4,2,4,6"/>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <Grid Margin="12,8">
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="格式" Style="{StaticResource RowTitle}" VerticalAlignment="Center"/>
+                                        <Border Grid.Column="1" Style="{StaticResource SegBox}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <RadioButton x:Name="FmtMp3" Style="{StaticResource SegItem}" GroupName="fmt" Content="MP3"/>
+                                                <RadioButton x:Name="FmtWav" Style="{StaticResource SegItem}" GroupName="fmt" Content="WAV"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                    <Border Height="1" Background="{StaticResource Line}"/>
+                                    <Grid x:Name="RowBitrate" Margin="12,8">
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="音质" Style="{StaticResource RowTitle}" VerticalAlignment="Center"/>
+                                        <Border Grid.Column="1" Style="{StaticResource SegBox}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <RadioButton x:Name="Br64" Style="{StaticResource SegItem}" GroupName="br" Content="64k"/>
+                                                <RadioButton x:Name="Br128" Style="{StaticResource SegItem}" GroupName="br" Content="128k"/>
+                                                <RadioButton x:Name="Br192" Style="{StaticResource SegItem}" GroupName="br" Content="192k"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                    <Border Height="1" Background="{StaticResource Line}"/>
+                                    <Grid Margin="12,8">
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="分轨保存" Style="{StaticResource RowTitle}" VerticalAlignment="Center"
+                                                   ToolTip="另存「电脑声音」和「麦克风」两个单独的文件"/>
+                                        <CheckBox x:Name="SplitSwitch" Grid.Column="1" Style="{StaticResource Switch}"/>
+                                    </Grid>
+                                    <Border Height="1" Background="{StaticResource Line}"/>
+                                    <Grid Margin="12,8">
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="分段" Style="{StaticResource RowTitle}" VerticalAlignment="Center"/>
+                                        <Border Grid.Column="1" Style="{StaticResource SegBox}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <RadioButton x:Name="Seg0" Style="{StaticResource SegItem}" GroupName="seg" Content="关"/>
+                                                <RadioButton x:Name="Seg30" Style="{StaticResource SegItem}" GroupName="seg" Content="30分钟"/>
+                                                <RadioButton x:Name="Seg60" Style="{StaticResource SegItem}" GroupName="seg" Content="1小时"/>
+                                                <RadioButton x:Name="Seg120" Style="{StaticResource SegItem}" GroupName="seg" Content="2小时"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="文件" Style="{StaticResource GroupHeader}"/>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <Grid Margin="12,9">
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="保存位置" Style="{StaticResource RowTitle}"/>
+                                            <TextBlock x:Name="DirDesc" Style="{StaticResource RowDesc}" FontFamily="{StaticResource MonoFont}"
+                                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                        <Button x:Name="BtnChangeDir" Grid.Column="1" Style="{StaticResource LinkButton}" Content="更改"
+                                                VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                    </Grid>
+                                    <Border Height="1" Background="{StaticResource Line}"/>
+                                    <StackPanel Margin="12,9">
+                                        <TextBlock Text="文件名" Style="{StaticResource RowTitle}"/>
+                                        <Border Style="{StaticResource InputBox}" Height="30" CornerRadius="6" Margin="0,6,0,0"
+                                                ToolTip="可用 {日期} {时间} {备注}">
+                                            <TextBox x:Name="TemplateBox" Style="{StaticResource BareTextBox}" Margin="8,0"
+                                                     FontFamily="{StaticResource MonoFont}" FontSize="12"/>
+                                        </Border>
+                                        <TextBlock x:Name="TemplatePreview" Style="{StaticResource RowDesc}" Margin="1,6,0,0"
+                                                   FontFamily="{StaticResource MonoFont}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="快捷键" Style="{StaticResource GroupHeader}"/>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <Grid Margin="12,8">
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="开始 / 停止" Style="{StaticResource RowTitle}"/>
+                                            <TextBlock x:Name="HkToggleErr" Style="{StaticResource RowDesc}" Foreground="{StaticResource WarnText}" Visibility="Collapsed"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Style="{StaticResource InputBox}" Height="28" Width="128" CornerRadius="6" Margin="10,0,0,0"
+                                                ToolTip="点击后按下新的组合键，Backspace 清除">
+                                            <TextBox x:Name="HkToggle" Style="{StaticResource BareTextBox}" IsReadOnly="True" IsReadOnlyCaretVisible="False"
+                                                     TextAlignment="Center" FontFamily="{StaticResource MonoFont}" FontSize="11.5" Cursor="Hand"/>
+                                        </Border>
+                                    </Grid>
+                                    <Border Height="1" Background="{StaticResource Line}"/>
+                                    <Grid Margin="12,8">
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="暂停 / 继续" Style="{StaticResource RowTitle}"/>
+                                            <TextBlock x:Name="HkPauseErr" Style="{StaticResource RowDesc}" Foreground="{StaticResource WarnText}" Visibility="Collapsed"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Style="{StaticResource InputBox}" Height="28" Width="128" CornerRadius="6" Margin="10,0,0,0"
+                                                ToolTip="点击后按下新的组合键，Backspace 清除">
+                                            <TextBox x:Name="HkPause" Style="{StaticResource BareTextBox}" IsReadOnly="True" IsReadOnlyCaretVisible="False"
+                                                     TextAlignment="Center" FontFamily="{StaticResource MonoFont}" FontSize="11.5" Cursor="Hand"/>
+                                        </Border>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="常规" Style="{StaticResource GroupHeader}"/>
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <Grid Margin="12,8">
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="录音时阻止休眠" Style="{StaticResource RowTitle}" VerticalAlignment="Center"/>
+                                        <CheckBox x:Name="SleepSwitch" Grid.Column="1" Style="{StaticResource Switch}"/>
+                                    </Grid>
+                                    <Border Height="1" Background="{StaticResource Line}"/>
+                                    <Grid Margin="12,8">
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="开机启动" Style="{StaticResource RowTitle}" VerticalAlignment="Center"/>
+                                        <CheckBox x:Name="AutoStartSwitch" Grid.Column="1" Style="{StaticResource Switch}"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <Grid Margin="4,14,4,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="AboutTitle" FontSize="11.5" Foreground="{StaticResource Text3}" VerticalAlignment="Center"/>
+                                <Button x:Name="BtnLogs" Grid.Column="1" Style="{StaticResource LinkButton}" Content="日志"
+                                        FontSize="11.5" VerticalAlignment="Center"/>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </Grid>
+
+            <!-- ================= 提示条 ================= -->
+            <Border x:Name="Toast" VerticalAlignment="Top" Margin="12,6,12,0" Padding="12,10" CornerRadius="9"
+                    Background="#2B3039" BorderBrush="{StaticResource Line2}" BorderThickness="1"
+                    Visibility="Collapsed" Opacity="0" IsHitTestVisible="False">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="20" ShadowDepth="6" Opacity="0.45" Direction="270"/>
+                </Border.Effect>
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="ToastShift"/>
+                </Border.RenderTransform>
+                <DockPanel>
+                    <ui:Glyph x:Name="ToastIcon" Kind="info" VerticalAlignment="Top" Margin="0,1,8,0"/>
+                    <TextBlock x:Name="ToastText" FontSize="12.5" TextWrapping="Wrap" LineHeight="18"/>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- ================= 音源下拉框 ================= -->
+        <Popup x:Name="PickerPopup" StaysOpen="False" AllowsTransparency="True" Placement="Bottom"
+               PopupAnimation="Fade" VerticalOffset="4">
+            <Border x:Name="PickerBorder" Background="{StaticResource PopupBg}" BorderBrush="{StaticResource Line2}"
+                    BorderThickness="1" CornerRadius="10" Padding="4" Margin="0,0,10,14">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="5" Opacity="0.5" Direction="270"/>
+                </Border.Effect>
+                <ScrollViewer MaxHeight="460" VerticalScrollBarVisibility="Auto" Focusable="False">
+                    <StackPanel x:Name="PickerList"/>
+                </ScrollViewer>
+            </Border>
+        </Popup>
+    </Grid>
+</Window>

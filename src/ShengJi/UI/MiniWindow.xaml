@@ -1,0 +1,42 @@
+<Window x:Class="ShengJi.UI.MiniWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:ShengJi.UI"
+        Title="声记" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize" SizeToContent="WidthAndHeight"
+        Foreground="{StaticResource Text}" FontFamily="{StaticResource UiFont}" FontSize="13"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display" Icon="/Assets/app.ico">
+    <Border x:Name="Pill" Margin="12" Width="330" Height="52" CornerRadius="14" Padding="16,0,6,0"
+            Background="{StaticResource WinBg}" BorderBrush="{StaticResource Line2}" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.55" Direction="270"/>
+        </Border.Effect>
+        <DockPanel>
+            <Ellipse x:Name="Dot" DockPanel.Dock="Left" Width="9" Height="9" Fill="{StaticResource Text3}" VerticalAlignment="Center"/>
+            <TextBlock x:Name="TimeText" DockPanel.Dock="Left" Text="00:00:00" FontFamily="{StaticResource NumFont}" FontSize="18"
+                       Margin="10,0,0,0" MinWidth="78" VerticalAlignment="Center" TextOptions.TextFormattingMode="Ideal"
+                       Typography.NumeralAlignment="Tabular"/>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="BtnPause" Style="{StaticResource IconButton}" ToolTip="暂停">
+                    <ui:Glyph x:Name="PauseGlyph" Kind="pause"/>
+                </Button>
+                <Button x:Name="BtnRecord" Style="{StaticResource IconButton}" ToolTip="录音">
+                    <Rectangle x:Name="RecCore" Width="12" Height="12" RadiusX="6" RadiusY="6" Fill="{StaticResource Rec}"/>
+                </Button>
+                <Button x:Name="BtnExpand" Style="{StaticResource IconButton}" ToolTip="展开">
+                    <ui:Glyph Kind="expand"/>
+                </Button>
+            </StackPanel>
+            <StackPanel VerticalAlignment="Center" Margin="12,0,8,0">
+                <DockPanel>
+                    <ui:Glyph Kind="speaker" Width="11" Height="11" Foreground="{StaticResource Text3}" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                    <ui:LevelMeter x:Name="SysMeter" Height="5" Segment="3" Gap="2" VerticalAlignment="Center"/>
+                </DockPanel>
+                <DockPanel Margin="0,6,0,0">
+                    <ui:Glyph Kind="mic" Width="11" Height="11" Foreground="{StaticResource Text3}" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                    <ui:LevelMeter x:Name="MicMeter" Height="5" Segment="3" Gap="2" VerticalAlignment="Center"/>
+                </DockPanel>
+            </StackPanel>
+        </DockPanel>
+    </Border>
+</Window>

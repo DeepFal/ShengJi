@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- .NET Framework 4.7.2：Win10 1803+ / Win11 系统自带，无需安装运行库 -->
+    <TargetFramework>net472</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AssemblyName>ShengJi</AssemblyName>
+    <RootNamespace>ShengJi</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <DebugType>embedded</DebugType>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- CS0420: volatile 字段按引用传给 Interlocked —— 这是预期用法 -->
+    <NoWarn>$(NoWarn);CS0420</NoWarn>
+
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Product>声记</Product>
+    <AssemblyTitle>声记 - 电脑声音与麦克风同步录音</AssemblyTitle>
+    <Description>声记 - 电脑声音与麦克风同步录音</Description>
+    <Company>声记</Company>
+    <Copyright>Copyright © 2026</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+    <!-- 使用自定义 Main（单实例、自检），App.xaml 只作为普通页面编译 -->
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Include="App.xaml" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <StartupObject>ShengJi.Program</StartupObject>
+  </PropertyGroup>
+
+</Project>
