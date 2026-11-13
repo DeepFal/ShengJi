@@ -149,15 +149,24 @@ namespace ShengJi.UI
             NoteBox.TextChanged += (s, e) => _c.Note = NoteBox.Text;
             NoteBox.KeyDown += (s, e) => { if (e.Key == Key.Enter) Keyboard.ClearFocus(); };
 
-            // 音源选择
-            SysPicker.Click += (s, e) => OpenPicker(true);
-            MicPicker.Click += (s, e) => OpenPicker(false);
+            // 音源选择：再点一次同一个按钮收起；点窗口其它地方 / 切走 / 拖动窗口也收起
+            SysPicker.Click += (s, e) => TogglePicker(true);
+            MicPicker.Click += (s, e) => TogglePicker(false);
             PickerPopup.Closed += (s, e) =>
             {
-                _pickerClosedAt = DateTime.UtcNow;
                 SysPicker.Tag = null;
                 MicPicker.Tag = null;
             };
+            PreviewMouseDown += (s, e) =>
+            {
+                if (!PickerPopup.IsOpen) return;
+                var src = e.OriginalSource as DependencyObject;
+                if (IsWithin(src, PickerBorder) || IsWithin(src, SysPicker) || IsWithin(src, MicPicker)) return;
+                PickerPopup.IsOpen = false;
+            };
+            Deactivated += (s, e) => PickerPopup.IsOpen = false;
+            LocationChanged += (s, e) => PickerPopup.IsOpen = false;
+            StateChanged += (s, e) => PickerPopup.IsOpen = false;
 
             // 控制器事件
             _c.StateChanged += UpdateRecordUi;

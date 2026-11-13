@@ -23,8 +23,8 @@
     <!-- CS0420: volatile 字段按引用传给 Interlocked —— 这是预期用法 -->
     <NoWarn>$(NoWarn);CS0420</NoWarn>
 
-    <Version>1.0.0</Version>
-    <FileVersion>1.0.0.0</FileVersion>
+    <Version>1.0.1</Version>
+    <FileVersion>1.0.1.0</FileVersion>
     <Product>声记</Product>
     <AssemblyTitle>声记 - 电脑声音与麦克风同步录音</AssemblyTitle>
     <Description>声记 - 电脑声音与麦克风同步录音</Description>

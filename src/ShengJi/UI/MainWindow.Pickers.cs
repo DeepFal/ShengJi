@@ -12,7 +12,6 @@ namespace ShengJi.UI
 {
     public partial class MainWindow
     {
-        private DateTime _pickerClosedAt;
         private bool _pickerIsSys;
         private readonly Dictionary<string, ImageSource> _appIcons = new Dictionary<string, ImageSource>(StringComparer.OrdinalIgnoreCase);
 
@@ -96,11 +95,27 @@ namespace ShengJi.UI
         //  下拉列表
         // ==================================================================
 
+        private void TogglePicker(bool isSys)
+        {
+            if (PickerPopup.IsOpen && _pickerIsSys == isSys) { PickerPopup.IsOpen = false; return; }
+            OpenPicker(isSys);
+        }
+
+        /// <summary>d 是否就是 ancestor 或在它里面（同时沿可视树和逻辑树向上找，兼容弹出框里的元素）。</summary>
+        private static bool IsWithin(DependencyObject d, DependencyObject ancestor)
+        {
+            while (d != null)
+            {
+                if (ReferenceEquals(d, ancestor)) return true;
+                d = d is Visual || d is System.Windows.Media.Media3D.Visual3D
+                    ? VisualTreeHelper.GetParent(d) ?? LogicalTreeHelper.GetParent(d)
+                    : LogicalTreeHelper.GetParent(d);
+            }
+            return false;
+        }
+
         private async void OpenPicker(bool isSys)
         {
-            // StaysOpen=False 的弹窗：点按钮本身会先关闭弹窗，这里避免它马上又被打开
-            if ((DateTime.UtcNow - _pickerClosedAt).TotalMilliseconds < 300 && _pickerIsSys == isSys) return;
-
             _pickerIsSys = isSys;
             var target = isSys ? SysPicker : MicPicker;
             PickerPopup.PlacementTarget = target;

@@ -1,9 +1,9 @@
 ﻿; 声记 安装脚本（Inno Setup 6.5+）
-; 由 build.ps1 调用：ISCC.exe /DAppVersion=1.0.0 installer\ShengJi.iss
+; 由 build.ps1 调用：ISCC.exe /DAppVersion=1.0.1 installer\ShengJi.iss
 ; 需要先生成 dist\build\声记.exe
 
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #define AppVersion "1.0.1"
 #endif
 #define AppName "声记"
 #define AppExe "声记.exe"

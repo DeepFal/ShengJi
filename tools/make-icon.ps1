@@ -1,5 +1,5 @@
-# 生成应用图标 app.ico（红色圆角方块 + 白色声波）
-# 用法：powershell -ExecutionPolicy Bypass -File tools\make-icon.ps1 -Out src\ShengJi\Assets\app.ico
+﻿# Generate app.ico (red rounded square + white waveform bars)
+# Usage: powershell -ExecutionPolicy Bypass -File tools\make-icon.ps1 -Out src\ShengJi\Assets\app.ico
 param([Parameter(Mandatory = $true)][string]$Out)
 
 Add-Type -AssemblyName System.Drawing
@@ -13,7 +13,7 @@ function New-IconBitmap([int]$s) {
     $g.Clear([System.Drawing.Color]::Transparent)
 
     $k = $s / 20.0
-    # 圆角矩形
+    # rounded square
     $r = 5 * $k
     $path = New-Object System.Drawing.Drawing2D.GraphicsPath
     $d = 2 * $r
@@ -26,7 +26,7 @@ function New-IconBitmap([int]$s) {
     $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush $rect, ([System.Drawing.Color]::FromArgb(255, 255, 99, 112)), ([System.Drawing.Color]::FromArgb(255, 236, 52, 72)), 90
     $g.FillPath($brush, $path)
 
-    # 声波竖线
+    # waveform bars
     $pen = New-Object System.Drawing.Pen ([System.Drawing.Color]::White), ([single](1.9 * $k))
     $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
     $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
@@ -42,7 +42,7 @@ function Get-DibBytes([System.Drawing.Bitmap]$bmp) {
     $s = $bmp.Width
     $ms = New-Object System.IO.MemoryStream
     $w = New-Object System.IO.BinaryWriter $ms
-    # BITMAPINFOHEADER（高度 = 2 倍，含 AND 掩码）
+    # BITMAPINFOHEADER (height = 2x: XOR image + AND mask)
     $w.Write([int]40); $w.Write([int]$s); $w.Write([int]($s * 2)); $w.Write([int16]1); $w.Write([int16]32)
     $w.Write([int]0); $w.Write([int]0); $w.Write([int]0); $w.Write([int]0); $w.Write([int]0); $w.Write([int]0)
     for ($y = $s - 1; $y -ge 0; $y--) {
@@ -93,4 +93,4 @@ for ($i = 0; $i -lt $sizes.Count; $i++) {
 }
 foreach ($img in $images) { $w.Write($img) }
 $w.Flush(); $fs.Close()
-Write-Output "已生成 $Out"
+Write-Output "Generated $Out"

@@ -361,7 +361,7 @@
         </Grid>
 
         <!-- ================= 音源下拉框 ================= -->
-        <Popup x:Name="PickerPopup" StaysOpen="False" AllowsTransparency="True" Placement="Bottom"
+        <Popup x:Name="PickerPopup" StaysOpen="True" AllowsTransparency="True" Placement="Bottom"
                PopupAnimation="Fade" VerticalOffset="4">
             <Border x:Name="PickerBorder" Background="{StaticResource PopupBg}" BorderBrush="{StaticResource Line2}"
                     BorderThickness="1" CornerRadius="10" Padding="4" Margin="0,0,10,14">

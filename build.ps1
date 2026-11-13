@@ -1,6 +1,6 @@
 ﻿# 一键打包：编译 Release → 生成便携版 zip → 生成安装包
-# 用法（在项目根目录）：powershell -ExecutionPolicy Bypass -File build.ps1 [-Version 1.0.0]
-param([string]$Version = "1.0.0")
+# 用法（在项目根目录）：powershell -ExecutionPolicy Bypass -File build.ps1 [-Version 1.0.1]
+param([string]$Version = "1.0.1")
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot

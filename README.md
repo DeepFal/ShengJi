@@ -27,10 +27,10 @@ dist/                 打包产物
 本机安装位置：SDK 在 `%LOCALAPPDATA%\Microsoft\dotnet`，Inno Setup 在 `%LOCALAPPDATA%\Programs\Inno Setup 6`（便携模式）。
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version 1.0.0
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version 1.0.1
 ```
 
-产物：`dist\声记_v1.0.0_安装版.exe`、`dist\声记_v1.0.0_便携版.zip`。
+产物：`dist\声记_v1.0.1_安装版.exe`、`dist\声记_v1.0.1_便携版.zip`。
 
 ## 关键设计
 
