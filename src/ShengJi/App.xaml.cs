@@ -62,6 +62,14 @@ namespace ShengJi
             _mini = new MiniWindow(Controller, this);
             _mini.Closing += (s, ev) => { if (!IsExiting) { ev.Cancel = true; _mini.Hide(); _inMini = false; } };
 
+            // 有窗口显示电平时高频刷新，只剩托盘时降频
+            Action meterRate = () => Controller.SetMeterRate(
+                (_main.IsVisible && _main.WindowState != WindowState.Minimized) || _mini.IsVisible);
+            _main.IsVisibleChanged += (s, ev) => meterRate();
+            _main.StateChanged += (s, ev) => meterRate();
+            _mini.IsVisibleChanged += (s, ev) => meterRate();
+            meterRate();
+
             if (!StartMinimized) _main.Show();
             StartActivationListener();
             SessionEnding += OnSessionEnding;

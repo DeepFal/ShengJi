@@ -170,6 +170,116 @@ namespace ShengJi.Audio
         }
     }
 
+    /// <summary>
+    /// 电平表用的短时响度：ITU-R BS.1770 的 K 加权（削弱人耳不敏感的低频、略提升 2kHz 以上），
+    /// 再做 25ms 的能量积分。比采样峰值更接近听感：敲键盘、喷麦这类短促声音不会把表顶满，
+    /// 轻声和大声能明显区分。
+    /// 在采集线程上随数据到达即时计算（不经过混音的 250ms 延迟），UI 线程读取。输入必须是 48kHz 立体声。
+    /// </summary>
+    internal sealed class LoudnessMeter
+    {
+        // BS.1770 给出的 48kHz 系数。第 1 级：高频搁架（模拟头部声学效应）；第 2 级：高通（RLB 加权）
+        private const double A1b0 = 1.53512485958697, A1b1 = -2.69169618940638, A1b2 = 1.19839281085285,
+                             A1a1 = -1.69065929318241, A1a2 = 0.73248077421585;
+        private const double A2a1 = -1.99004745483398, A2a2 = 0.99007225036621;   // b = 1, -2, 1
+        private const double Tau = 0.025;
+        private static readonly double Alpha = 1 - Math.Exp(-1.0 / (Tau * EngineClock.SampleRate));
+
+        private readonly bool _mono;
+        // 滤波器状态（仅采集线程访问）：[声道] 第 1 级 z1 z2，第 2 级 z1 z2
+        private double _l1, _l2, _l3, _l4, _r1, _r2, _r3, _r4;
+        private double _env;
+
+        private readonly object _lock = new object();
+        private double _max;        // 上次读取以来 _env 的最大值
+        private double _last;       // 最近一次数据结束时的 _env
+        private long _lastTicks;
+        private bool _fresh;
+
+        /// <param name="mono">麦克风：先合成单声道（混音时会放在左右两边，按两个声道计）。</param>
+        public LoudnessMeter(bool mono) { _mono = mono; }
+
+        public void Process(float[] buf, int frames)
+        {
+            double env = _env, max = 0, a = Alpha;
+            if (_mono)
+            {
+                for (int i = 0; i < frames; i++)
+                {
+                    double y = K((buf[i * 2] + buf[i * 2 + 1]) * 0.5, ref _l1, ref _l2, ref _l3, ref _l4);
+                    env += a * (2 * y * y - env);
+                    if (env > max) max = env;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < frames; i++)
+                {
+                    double yl = K(buf[i * 2], ref _l1, ref _l2, ref _l3, ref _l4);
+                    double yr = K(buf[i * 2 + 1], ref _r1, ref _r2, ref _r3, ref _r4);
+                    env += a * (yl * yl + yr * yr - env);
+                    if (env > max) max = env;
+                }
+            }
+            if (double.IsNaN(env) || double.IsInfinity(env) || double.IsInfinity(max))
+            {
+                Reset();
+                env = max = 0;
+            }
+            else
+            {
+                // 静音时状态会衰减进非规格化数区间（运算很慢），直接归零
+                if (env < 1e-20) env = 0;
+                if (Math.Abs(_l1) + Math.Abs(_l2) + Math.Abs(_l3) + Math.Abs(_l4) < 1e-20) _l1 = _l2 = _l3 = _l4 = 0;
+                if (Math.Abs(_r1) + Math.Abs(_r2) + Math.Abs(_r3) + Math.Abs(_r4) < 1e-20) _r1 = _r2 = _r3 = _r4 = 0;
+            }
+            _env = env;
+
+            lock (_lock)
+            {
+                if (max > _max) _max = max;
+                _last = _env;
+                _lastTicks = Stopwatch.GetTimestamp();
+                _fresh = true;
+            }
+        }
+
+        /// <summary>
+        /// 取出上次读取以来的最大短时能量（K 加权、各声道相加的均方值）。
+        /// 期间没有新数据时按积分时间常数衰减——回环设备没声音时可能完全不出数据。
+        /// </summary>
+        public double Read()
+        {
+            lock (_lock)
+            {
+                double v;
+                if (_fresh) v = _max;
+                else
+                {
+                    double dt = (Stopwatch.GetTimestamp() - _lastTicks) / (double)Stopwatch.Frequency;
+                    v = _last * Math.Exp(-dt / Tau);
+                }
+                _max = 0;
+                _fresh = false;
+                return v;
+            }
+        }
+
+        private void Reset() => _l1 = _l2 = _l3 = _l4 = _r1 = _r2 = _r3 = _r4 = 0;
+
+        // 两级双二阶滤波（转置直接 II 型）
+        private static double K(double x, ref double s1, ref double s2, ref double s3, ref double s4)
+        {
+            double y1 = A1b0 * x + s1;
+            s1 = A1b1 * x - A1a1 * y1 + s2;
+            s2 = A1b2 * x - A1a2 * y1;
+            double y2 = y1 + s3;
+            s3 = -2 * y1 - A2a1 * y2 + s4;
+            s4 = y1 - A2a2 * y2;
+            return y2;
+        }
+    }
+
     /// <summary>采集到的原始格式描述（来自 WAVEFORMATEX / WAVEFORMATEXTENSIBLE）。</summary>
     internal sealed class SourceFormat
     {

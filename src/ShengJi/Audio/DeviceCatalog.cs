@@ -22,7 +22,7 @@ namespace ShengJi.Audio
 
     internal sealed class AppInfo
     {
-        /// <summary>小写 exe 文件名，例如 "kook.exe"，作为应用的稳定标识。</summary>
+        /// <summary>小写 exe 文件名，例如 "msedge.exe"，作为应用的稳定标识。</summary>
         public string ExeName;
         public string DisplayName;
         public string Path;

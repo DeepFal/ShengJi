@@ -254,6 +254,25 @@
                                             </StackPanel>
                                         </Border>
                                     </Grid>
+                                    <Border Height="1" Background="{StaticResource Line}"/>
+                                    <Grid x:Name="RowAlign" Margin="12,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="人声对齐" Style="{StaticResource RowTitle}" VerticalAlignment="Center"
+                                                   ToolTip="补偿耳机和麦克风的延迟，让录音里的人声和听到的声音对齐"/>
+                                        <Border Grid.Column="1" Style="{StaticResource InputBox}" Height="28" Width="76" CornerRadius="6">
+                                            <DockPanel Margin="8,0">
+                                                <TextBlock DockPanel.Dock="Right" Text="ms" Style="{StaticResource RowDesc}" Margin="3,0,0,0"
+                                                           VerticalAlignment="Center"/>
+                                                <TextBox x:Name="AlignBox" Style="{StaticResource BareTextBox}" TextAlignment="Right"
+                                                         FontFamily="{StaticResource MonoFont}" FontSize="11.5" MaxLength="4"/>
+                                            </DockPanel>
+                                        </Border>
+                                        <Button x:Name="BtnCalibrate" Grid.Column="2" Style="{StaticResource LinkButton}" Content="校准"
+                                                VerticalAlignment="Center" Margin="10,0,0,0"
+                                                ToolTip="耳罩贴近麦克风，自动测量"/>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
 

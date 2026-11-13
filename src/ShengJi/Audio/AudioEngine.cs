@@ -115,6 +115,24 @@ namespace ShengJi.Audio
         public volatile float SysGain = 1f, MicGain = 1f;
         public volatile bool SysEnabled = true, MicEnabled = true;
 
+        /// <summary>
+        /// 人声对齐：按「收听设备|麦克风」查补偿毫秒数（找不到时用 <see cref="AlignDefaultMs"/>）。
+        /// 整表替换（不可修改已传入的字典）。电脑声音会整体后移这么多，抵消耳机播放和麦克风采集里 Windows 没报告的延迟。
+        /// </summary>
+        public void SetAlignment(IDictionary<string, int> table, int defaultMs)
+        {
+            _alignTable = table;
+            _alignDefault = defaultMs;
+            _wake.Set();
+        }
+        private volatile IDictionary<string, int> _alignTable;
+        private volatile int _alignDefault;
+        public static string AlignKey(string renderId, string micId) => renderId + "|" + micId;
+
+        /// <summary>当前用于人声对齐的收听设备 / 麦克风（调度线程更新）和生效的补偿值。</summary>
+        public volatile string AlignRenderId, AlignMicId;
+        public volatile int AlignMs;
+
         // ---- 采集源（调度线程写，混音线程读整组数组）----
         private volatile CaptureSource[] _sys = Empty, _mic = Empty;
 
@@ -137,8 +155,6 @@ namespace ShengJi.Audio
         // ---- 混音状态 ----
         private long _produced;
         private float _limEnv, _limEnvSys, _limEnvMic;
-        private readonly object _lvlLock = new object();
-        private float _sysPeak, _micPeak;
 
         // ---- 录音输出（可同时有多个：上一段收尾时下一段已开始）----
         private readonly object _sinkLock = new object();
@@ -198,14 +214,22 @@ namespace ShengJi.Audio
         /// <summary>请求调度线程立即重新检查（例如用户刚打开下拉框）。</summary>
         public void Poke() => _wake.Set();
 
-        /// <summary>读取并清零自上次读取以来的峰值（线性幅度，已乘增益）。</summary>
+        /// <summary>
+        /// 读取自上次读取以来两路的最大短时响度（已乘音量），用线性幅度表示：20·log10(值) 即 LUFS 口径的 dB。
+        /// 直接取自采集线程，比录进文件的数据早约 250ms，电平表因此没有延迟。
+        /// </summary>
         public void ReadLevels(out float sys, out float mic)
         {
-            lock (_lvlLock)
-            {
-                sys = _sysPeak; mic = _micPeak;
-                _sysPeak = 0; _micPeak = 0;
-            }
+            sys = Loudness(_sys, SysEnabled ? SysGain : 0f);
+            mic = Loudness(_mic, MicEnabled ? MicGain : 0f);
+        }
+
+        private static float Loudness(CaptureSource[] sources, float gain)
+        {
+            double e = 0;
+            foreach (var s in sources) e += s.Meter.Read();   // 多个来源（全部设备）按能量相加
+            const double Lufs = 0.85290578;                   // 10^(-0.691/10)：BS.1770 的 -0.691dB 校正
+            return (float)(Math.Sqrt(e * Lufs) * gain);
         }
 
         public void AttachSink(IAudioSink sink)
@@ -369,10 +393,28 @@ namespace ShengJi.Audio
             var micSpecEff = micSpec.Mode == SourceMode.Device ? micSpec : new SourceSpec { Mode = SourceMode.Default };
             string micResolve = ResolveDevice(en, EDataFlow.Capture, micSpecEff, micWant, micStatus, SourceKind.Microphone);
 
+            // ---------- 人声对齐 ----------
+            // 收听设备：按设备录时就是那个设备；“全部设备”“按应用”时按系统默认播放设备算
+            string listenId = sysWant.Count > 0 && sysWant[0].Kind == SourceKind.Loopback && sysSpec.Mode != SourceMode.AllOutputs
+                ? sysWant[0].DeviceId
+                : DeviceCatalog.GetDefaultId(en, EDataFlow.Render, ERole.Console);
+            string micId = micWant.Count > 0 ? micWant[0].DeviceId : null;
+            int alignMs = 0;
+            if (listenId != null && micId != null)
+            {
+                var table = _alignTable;
+                alignMs = table != null && table.TryGetValue(AlignKey(listenId, micId), out int v) ? v : _alignDefault;
+            }
+            bool alignChanged = listenId != AlignRenderId || micId != AlignMicId || alignMs != AlignMs;
+            AlignRenderId = listenId; AlignMicId = micId; AlignMs = alignMs;
+            if (alignChanged) Log.Info($"人声对齐 {alignMs}ms（{listenId} / {micId}）");
+
             // ---------- 应用到采集源 ----------
             var sys = _sys; Apply(ref sys, sysWant, sysStatus); _sys = sys;
             var mic = _mic; Apply(ref mic, micWant, micStatus); _mic = mic;
             CleanupBackoff(sysWant.Concat(micWant).Select(w => w.Key));
+            int delayFrames = alignMs * EngineClock.SampleRate / 1000;
+            foreach (var s in sys) s.DelayFrames = delayFrames;
 
             // ---------- 通知 ----------
             if (!specChanged)
@@ -383,7 +425,7 @@ namespace ShengJi.Audio
             _lastSysResolve = sysResolve; _lastSysState = sysStatus.State;
             _lastMicResolve = micResolve; _lastMicState = micStatus.State;
 
-            bool changed = !SameStatus(SysStatus, sysStatus) || !SameStatus(MicStatus, micStatus);
+            bool changed = !SameStatus(SysStatus, sysStatus) || !SameStatus(MicStatus, micStatus) || alignChanged;
             SysStatus = sysStatus;
             MicStatus = micStatus;
             if (changed || specChanged) StatusChanged?.Invoke();
@@ -662,7 +704,6 @@ namespace ShengJi.Audio
 
                         float gS = SysEnabled ? SysGain : 0f;
                         float gM = MicEnabled ? MicGain : 0f;
-                        float pS = 0, pM = 0;
                         if (!IsFinite(_limEnv)) _limEnv = 0;
                         if (!IsFinite(_limEnvSys)) _limEnvSys = 0;
                         if (!IsFinite(_limEnvMic)) _limEnvMic = 0;
@@ -674,9 +715,6 @@ namespace ShengJi.Audio
                             float m = (micBuf[i] + micBuf[i + 1]) * 0.5f * gM;
 
                             float al = Math.Abs(sl), ar = Math.Abs(sr), am = Math.Abs(m);
-                            if (al > pS) pS = al;
-                            if (ar > pS) pS = ar;
-                            if (am > pM) pM = am;
 
                             // 混音 + 峰值限幅（瞬时压缩、平滑释放），保证不爆音
                             float l = sl + m, r = sr + m;
@@ -709,11 +747,6 @@ namespace ShengJi.Audio
 
                         produced += n;
                         Interlocked.Exchange(ref _produced, produced);
-                        lock (_lvlLock)
-                        {
-                            if (pS > _sysPeak) _sysPeak = pS;
-                            if (pM > _micPeak) _micPeak = pM;
-                        }
                     }
                 }
             }

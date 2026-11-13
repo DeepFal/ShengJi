@@ -28,6 +28,8 @@ namespace ShengJi.Audio
         public readonly int ProcessId;       // Process
         public readonly string Key;
         public readonly Timeline Timeline;
+        /// <summary>电平表（随数据到达即时更新，不受混音延迟影响）。</summary>
+        public readonly LoudnessMeter Meter;
 
         public volatile bool Failed;
         public volatile bool Started;        // 已成功开始采集
@@ -36,6 +38,13 @@ namespace ShengJi.Audio
 
         /// <summary>出错退出时回调（用来立即唤醒调度线程）。在采集线程上调用。</summary>
         public Action OnFailed;
+
+        /// <summary>
+        /// 写入时间轴时整体往后挪的帧数（人声对齐：电脑声音按耳机 + 麦克风的实测延迟后移）。
+        /// 可随时修改，下一批数据会重新对齐到新位置。
+        /// </summary>
+        public volatile int DelayFrames;
+        private int _appliedDelay;
 
         private readonly long _createdTicks = Stopwatch.GetTimestamp();
         private long _lastDataTicks;         // 最近一次收到数据包的时间（Stopwatch ticks）
@@ -64,6 +73,7 @@ namespace ShengJi.Audio
             ProcessId = processId;
             Key = MakeKey(kind, deviceId, processId);
             Timeline = new Timeline(EngineClock.SampleRate * 4, startReadPos);
+            Meter = new LoudnessMeter(mono: kind == SourceKind.Microphone);
         }
 
         public static string MakeKey(SourceKind kind, string deviceId, int pid) =>
@@ -321,7 +331,11 @@ namespace ShengJi.Audio
                 if (Math.Abs(q - est) < 0.3 * EngineClock.SampleRate) { est = q; fromQpc = true; }
             }
 
-            bool gap = !_hasPos || (now - _lastDeliver) > GapFrames;
+            // 人声对齐：整体后移；数值变了就当作断档，直接对齐到新位置
+            int delay = DelayFrames;
+            est += delay;
+            bool gap = !_hasPos || (now - _lastDeliver) > GapFrames || delay != _appliedDelay;
+            _appliedDelay = delay;
             double err = est - _writePos;
             if (gap || Math.Abs(err) > ResyncFrames)
             {
@@ -353,6 +367,7 @@ namespace ShengJi.Audio
             int outFrames = _resampler.Process(_stage, frames, ratio, _out);
 
             Timeline.Write(_writePos, _out, outFrames);
+            Meter.Process(_out, outFrames);
             _writePos += outFrames;
             _lastDeliver = now;
         }

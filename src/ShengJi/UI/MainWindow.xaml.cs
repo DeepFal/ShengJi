@@ -171,7 +171,7 @@ namespace ShengJi.UI
             // 控制器事件
             _c.StateChanged += UpdateRecordUi;
             _c.LevelsUpdated += OnLevels;
-            _c.SourceStatusChanged += () => { UpdatePickers(); UpdateHints(); };
+            _c.SourceStatusChanged += () => { UpdatePickers(); UpdateHints(); UpdateAlignUi(); };
             _c.RecordingSaved += OnRecordingSaved;
             _c.NoteCleared += () => { NoteBox.Text = ""; };
 
@@ -234,6 +234,7 @@ namespace ShengJi.UI
 
         private void UpdateRecordUi()
         {
+            UpdateAlignUi();   // 录音中不能校准
             var st = _c.State;
             bool changed = _shownState != st;
             _shownState = st;

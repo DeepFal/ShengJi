@@ -1,7 +1,9 @@
 using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using ShengJi.Core;
 
 namespace ShengJi.UI
@@ -42,6 +44,7 @@ namespace ShengJi.UI
             AboutTitle.Text = $"声记 {ver.Major}.{ver.Minor}.{ver.Build}" + (Paths.IsPortable ? " · 便携版" : "");
 
             UpdateFormatUi();
+            UpdateAlignUi();
             _loading = old;
         }
 
@@ -97,6 +100,60 @@ namespace ShengJi.UI
 
             WireHotkeyBox(HkToggle, true);
             WireHotkeyBox(HkPause, false);
+
+            AlignBox.PreviewTextInput += (s, e) => e.Handled = !e.Text.All(char.IsDigit);
+            DataObject.AddPastingHandler(AlignBox, (s, e) => e.CancelCommand());
+            AlignBox.PreviewKeyDown += (s, e) =>
+            {
+                if (e.Key == Key.Enter || e.Key == Key.Escape)
+                {
+                    if (e.Key == Key.Escape) AlignBox.Text = _c.CurrentAlignMs.ToString();
+                    Keyboard.ClearFocus();
+                    e.Handled = true;
+                }
+            };
+            AlignBox.LostKeyboardFocus += (s, e) => CommitAlign();
+            BtnCalibrate.Click += (s, e) => Calibrate();
+        }
+
+        // ------------------------------------------------------------------
+        //  人声对齐
+        // ------------------------------------------------------------------
+
+        internal void UpdateAlignUi()
+        {
+            bool avail = _c.AlignAvailable;
+            var entry = _c.CurrentAlign;
+            if (!AlignBox.IsKeyboardFocused) AlignBox.Text = avail ? _c.CurrentAlignMs.ToString() : "—";
+            AlignBox.IsEnabled = avail && !_c.IsCalibrating;
+            // 没校准过（用的是默认值）时数字显示得淡一些
+            AlignBox.Foreground = (Brush)FindResource(entry == null ? "Text3" : "Text");
+            AlignBox.ToolTip = !avail ? "没有可用的耳机或麦克风"
+                : entry == null ? "未校准，使用默认值"
+                : entry.Calibrated ? "已校准" : "手动设置";
+            BtnCalibrate.IsEnabled = avail && !_c.IsRecording && !_c.IsCalibrating;
+            BtnCalibrate.Content = _c.IsCalibrating ? "校准中…" : "校准";
+        }
+
+        private void CommitAlign()
+        {
+            if (_c.AlignAvailable && int.TryParse(AlignBox.Text.Trim(), out int v))
+            {
+                v = Math.Max(0, Math.Min(AppSettings.MaxAlignMs, v));
+                if (v != _c.CurrentAlignMs) _c.SetAlignManual(v);
+            }
+            UpdateAlignUi();
+        }
+
+        private async void Calibrate()
+        {
+            if (!_c.AlignAvailable || _c.IsRecording || _c.IsCalibrating) return;
+            if (!ConfirmDialog.Ask(this, "人声对齐校准", "把一侧耳罩贴近麦克风，会播放几声提示音。", "开始", "取消", false)) return;
+            var task = _c.CalibrateAsync();
+            UpdateAlignUi();
+            var r = await task;
+            UpdateAlignUi();
+            ShowToast(r.Ok ? $"人声对齐 {r.Ms}ms" : r.Error, r.Ok ? Audio.NoticeKind.Ok : Audio.NoticeKind.Warn);
         }
 
         private void SettingChanged()

@@ -113,7 +113,7 @@ namespace ShengJi.UI
                 x + r, y, x + w - r, x + w, r, y + r, y + h - r, y + h, x);
     }
 
-    /// <summary>分段式电平表。Level / Peak 取值 0..1（对应 -60dB..0dB）。</summary>
+    /// <summary>分段式电平表。Level / Peak 取值 0..1（显示位置，刻度换算见 MeterState.Position）。</summary>
     public sealed class LevelMeter : FrameworkElement
     {
         public static readonly DependencyProperty LevelProperty = DependencyProperty.Register(

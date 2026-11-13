@@ -53,6 +53,10 @@ namespace ShengJi
             Check(mp3, "系统 MP3 编码器可用");
             if (mp3) TestMp3Encode(dir);
 
+            // 2b. 电平表（响度计）与人声对齐校准算法：纯计算，不需要声卡
+            TestLoudnessMeter();
+            TestCalibrationAnalysis();
+
             // 3. 引擎：默认设备
             var engine = new AudioEngine();
             engine.Notice += (m, k) => Line($"   [提示/{k}] {m}");
@@ -84,7 +88,7 @@ namespace ShengJi
             }
             rec.Stop();
             Check(rec.WaitCompleted(5000), "WAV 录音正常结束");
-            Line($"录音时长 {rec.Duration.TotalSeconds:F2}s，电平峰值 电脑 {Db(maxSys)}  麦克风 {Db(maxMic)}");
+            Line($"录音时长 {rec.Duration.TotalSeconds:F2}s，最大响度 电脑 {Db(maxSys)}  麦克风 {Db(maxMic)}");
             Check(Math.Abs(rec.Duration.TotalSeconds - 3.0) < 0.3, "录音时长与实际时间一致（±0.3s）");
             foreach (var f in Directory.GetFiles(opt.OutputDir))
             {
@@ -104,7 +108,7 @@ namespace ShengJi
                 engine.ReadLevels(out _, out _);
                 float appMax = 0;
                 for (int i = 0; i < 10; i++) { Thread.Sleep(100); engine.ReadLevels(out float s, out _); appMax = Math.Max(appMax, s); }
-                Line($"按应用录制({exe}): 状态 {engine.SysStatus.State} 采集源 {engine.SysStatus.ActiveSources} 峰值 {Db(appMax)}");
+                Line($"按应用录制({exe}): 状态 {engine.SysStatus.State} 采集源 {engine.SysStatus.ActiveSources} 响度 {Db(appMax)}");
                 Check(engine.SysStatus.ActiveSources > 0, "按应用录制已开始采集");
                 Check(appMax > 0.005f, "按应用录制收到了该应用的声音");
             }
@@ -171,12 +175,15 @@ namespace ShengJi
                     engine.ReadLevels(out float sv, out _);
                     if (sw2.ElapsedMilliseconds > 1200) got = Math.Max(got, sv);
                 }
-                Line($"应用启动后: 状态 {engine.SysStatus.State} 采集源 {engine.SysStatus.ActiveSources} 峰值 {Db(got)}");
+                Line($"应用启动后: 状态 {engine.SysStatus.State} 采集源 {engine.SysStatus.ActiveSources} 响度 {Db(got)}");
                 Check(engine.SysStatus.State == GroupState.Ok && got > 0.005f, "应用启动后自动接上并录到声音");
                 p.WaitForExit(5000);
                 Thread.Sleep(1800);
                 Check(engine.SysStatus.State == GroupState.Waiting, "应用退出后回到“等待启动”");
             }
+
+            // 9b. 人声对齐确实把电脑声音后移了设定值；电平表没有混音延迟
+            if (tone) TestAlignmentAndMeterLatency(engine, cat);
 
             // 10. 自动分段（测试用 1 秒一段）
             engine.SetSources(new SourceSpec { Mode = SourceMode.Default }, new SourceSpec { Mode = SourceMode.Default });
@@ -230,6 +237,155 @@ namespace ShengJi
         }
 
         // ------------------------------------------------------------------
+
+        /// <summary>响度计：K 加权读数与 BS.1770 一致（-20dBFS 正弦，双声道），IEC 刻度换算正确。</summary>
+        private static void TestLoudnessMeter()
+        {
+            double Measure(double freq, bool mono)
+            {
+                var m = new LoudnessMeter(mono);
+                var buf = new float[4800 * 2];
+                double peakRead = 0;
+                for (int blk = 0; blk < 20; blk++)   // 2 秒
+                {
+                    for (int i = 0; i < 4800; i++)
+                    {
+                        float v = (float)(0.1 * Math.Sin(2 * Math.PI * freq * (blk * 4800 + i) / 48000.0));
+                        buf[i * 2] = v; buf[i * 2 + 1] = v;
+                    }
+                    m.Process(buf, 4800);
+                    double r = m.Read();
+                    if (blk >= 10) peakRead = Math.Max(peakRead, r);   // 稳定后
+                }
+                return 10 * Math.Log10(peakRead * 0.85290578);
+            }
+            double k1k = Measure(1000, false), k4k = Measure(4000, false), k100 = Measure(100, false), mono1k = Measure(1000, true);
+            Line($"响度计(-20dBFS 正弦): 1kHz {k1k:F2}  4kHz {k4k:F2}  100Hz {k100:F2}  单声道1kHz {mono1k:F2} LUFS（理论 -19.99 / -16.72 / -21.82 / -19.99）");
+            Check(Math.Abs(k1k + 19.99) < 0.15 && Math.Abs(k4k + 16.72) < 0.15 && Math.Abs(k100 + 21.82) < 0.25 && Math.Abs(mono1k + 19.99) < 0.15,
+                  "响度计读数符合 BS.1770（误差 < 0.25dB，低频含 25ms 积分的纹波）");
+
+            var silent = new LoudnessMeter(false);
+            silent.Process(new float[9600], 4800);
+            Check(silent.Read() == 0, "静音时读数为 0");
+
+            double p20 = MeterState.Position((float)Math.Pow(10, -20 / 20.0)), p40 = MeterState.Position((float)Math.Pow(10, -40 / 20.0));
+            Check(Math.Abs(p20 - 0.5) < 1e-6 && Math.Abs(p40 - 0.15) < 1e-6 && MeterState.Position(1f) == 1 && MeterState.Position(0f) == 0,
+                  "电平表刻度符合 IEC 60268-18（-20dB 在 50%，-40dB 在 15%）");
+        }
+
+        /// <summary>校准算法：合成信号里已知延迟能被准确测出；没有提示音时不会误报。</summary>
+        private static void TestCalibrationAnalysis()
+        {
+            bool allOk = true;
+            var parts = new System.Collections.Generic.List<string>();
+            foreach (double d in new[] { 0.0, 37.4, 118.5, 260.0, 845.2 })
+            {
+                var (loop, mic) = AlignmentCalibrator.Synthesize(d, (int)d + 1);
+                var r = AlignmentCalibrator.Analyze(loop, mic);
+                parts.Add(r.Ok ? $"{d}→{r.Ms}" : $"{d}→失败({r.Error} {r.Detail})");
+                if (!r.Ok || Math.Abs(r.Ms - d) > 1.0) allOk = false;
+            }
+            Line("校准算法(设定→测得 ms): " + string.Join("  ", parts));
+            Check(allOk, "校准算法测得的延迟与设定值一致（±1ms）");
+
+            var (l2, m2) = AlignmentCalibrator.Synthesize(100, 7);
+            var noMic = AlignmentCalibrator.Analyze(l2, new float[m2.Length]);
+            var noLoop = AlignmentCalibrator.Analyze(new float[l2.Length], m2);
+            Line($"   麦克风没收到: {noMic.Error}；没播放出来: {noLoop.Error}");
+            Check(!noMic.Ok && !noLoop.Ok, "收不到提示音时校准报失败，不会给出错误数值");
+        }
+
+        /// <summary>
+        /// 实际播放提示音：① 引擎录到的电脑声音比同一时刻的原始回环正好晚设定的对齐值；
+        /// ② 电平表在声音进入时间轴后很快就有反应（不再有 250ms 混音延迟）。
+        /// </summary>
+        private static void TestAlignmentAndMeterLatency(AudioEngine engine, SourceCatalog cat)
+        {
+            string renderId = cat.Outputs.FirstOrDefault(o => o.IsDefault)?.Id;
+            if (renderId == null) { Line("   没有默认播放设备，跳过人声对齐测试"); return; }
+            engine.SetSources(new SourceSpec { Mode = SourceMode.Default }, new SourceSpec { Mode = SourceMode.Default });
+            engine.SetAlignment(new System.Collections.Generic.Dictionary<string, int>(), 200);
+            Thread.Sleep(1200);
+            int expectMs = engine.AlignMicId != null ? 200 : 0;   // 没有麦克风时不做对齐
+
+            // 引擎录到的电脑声音（经过对齐）
+            var probe = new ProbeSink();
+            // 同一设备、不加对齐的独立回环，作为参照
+            long start = (long)EngineClock.NowFrames;
+            var refSrc = new CaptureSource(SourceKind.Loopback, renderId, 0, start);
+            refSrc.Start();
+            var wait = Stopwatch.StartNew();
+            while (!refSrc.Started && wait.ElapsedMilliseconds < 4000) Thread.Sleep(20);
+            long s0 = (long)EngineClock.NowFrames;
+            refSrc.Timeline.SkipTo(s0);
+            probe.Begin(s0, 48000 * 8);
+            engine.AttachSink(probe);
+            engine.ReadLevels(out _, out _);
+
+            var seq = AlignmentCalibrator.MakeSequence(0.05f);   // 约 -26dBFS
+            var player = new Thread(() => { try { RenderPlayer.Play(renderId, seq, CancellationToken.None); } catch (Exception ex) { Line("   播放出错: " + ex.Message); } })
+                { IsBackground = true };
+            player.SetApartmentState(ApartmentState.MTA);
+            player.Start();
+
+            var refBuf = new float[48000 * 8];
+            var tmp = new float[4800 * 2];
+            long pos = s0;
+            double meterHit = -1;
+            var sw = Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < 6500)
+            {
+                Thread.Sleep(2);
+                engine.ReadLevels(out float lv, out _);
+                if (meterHit < 0 && lv > 0.003f) meterHit = EngineClock.NowFrames;
+                long target = (long)EngineClock.NowFrames - AudioEngine.LatencyFrames;
+                while (pos < target && pos - s0 + 4800 <= refBuf.Length)
+                {
+                    int n = (int)Math.Min(target - pos, 4800);
+                    Array.Clear(tmp, 0, n * 2);
+                    refSrc.Timeline.ReadAdd(pos, tmp, n, 1f);
+                    for (int i = 0; i < n; i++) refBuf[pos - s0 + i] = (tmp[i * 2] + tmp[i * 2 + 1]) * 0.5f;
+                    pos += n;
+                }
+            }
+            player.Join(2000);
+            engine.DetachSink(probe);
+            refSrc.Stop();
+            engine.SetAlignment(new System.Collections.Generic.Dictionary<string, int>(), 0);
+
+            var r = AlignmentCalibrator.Analyze(refBuf, probe.Data);
+            Line($"人声对齐: 设定 {expectMs}ms，录到的电脑声音相对原始回环 {(r.Ok ? r.Ms + "ms" : "未测出 " + r.Error)}  {r.Detail}");
+            Check(r.Ok && Math.Abs(r.Ms - expectMs) <= 2, "电脑声音按设定值后移（±2ms）");
+
+            // 第一声在原始回环时间轴上的位置 → 电平表第一次超过阈值的时刻
+            int onset = -1;
+            for (int i = 0; i < refBuf.Length; i++) if (Math.Abs(refBuf[i]) > 0.003f) { onset = i; break; }
+            if (onset >= 0 && meterHit > 0)
+            {
+                double lat = (meterHit - (s0 + onset)) / 48.0;
+                Line($"电平表延迟: {lat:F0}ms（相对声音在时间轴上的位置；负数表示系统提前交出了将要播放的数据）");
+                Check(lat < 60, "电平表没有混音延迟（< 60ms）");
+            }
+            else Fail("电平表延迟：没有检测到提示音");
+        }
+
+        /// <summary>收集引擎输出的电脑声音分轨（单声道），按时间轴位置对齐到 Begin 指定的起点。</summary>
+        private sealed class ProbeSink : IAudioSink
+        {
+            public float[] Data;
+            private long _start;
+            public void Begin(long start, int frames) { _start = start; Data = new float[frames]; }
+            public void Write(long pos, float[] mix, float[] sys, float[] mic, int frames)
+            {
+                for (int i = 0; i < frames; i++)
+                {
+                    long k = pos + i - _start;
+                    if (k >= 0 && k < Data.Length) Data[k] = (sys[i * 2] + sys[i * 2 + 1]) * 0.5f;
+                }
+            }
+            public bool IsFinished => false;
+            public void EngineStopped() { }
+        }
 
         private static void TestMp3Encode(string dir)
         {

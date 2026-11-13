@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 using ShengJi.Audio;
 using ShengJi.Core;
@@ -11,22 +13,46 @@ namespace ShengJi
 {
     internal enum RecState { Idle, Recording, Paused }
 
-    /// <summary>电平表的显示状态（带峰值保持和平滑下落）。</summary>
+    /// <summary>
+    /// 电平表的显示状态。输入是短时响度（见 <see cref="AudioEngine.ReadLevels"/>），
+    /// 按 IEC 60268-18 电平表刻度换算成 0..1：-20dB 以上刻度舒展、往下逐级压缩，
+    /// 正常说话在中段，轻声 / 大声差别明显，底噪几乎不亮。
+    /// 上升快、回落平滑，按实际经过的时间计算（与刷新频率无关）；另有峰值保持标记。
+    /// </summary>
     internal sealed class MeterState
     {
         public double Level;   // 0..1
         public double Peak;    // 0..1
-        public bool HasSound;  // 最近 0.4 秒内有明显声音
-        private double _peakT, _soundT;
+        private double _peakT, _lastT = double.NaN;
+
+        private const double AttackTau = 0.012, ReleaseTau = 0.14;   // 秒
+        private const double PeakHold = 0.9, PeakFall = 0.35;         // 秒，每秒下落的比例
 
         public void Update(float linear, double now)
         {
-            double pos = linear <= 1e-6f ? 0 : Math.Max(0, Math.Min(1, (20 * Math.Log10(linear) + 60) / 60));
-            Level = pos > Level ? Level + (pos - Level) * 0.7 : Level + (pos - Level) * 0.18;
+            double dt = double.IsNaN(_lastT) ? 0 : Math.Max(0, Math.Min(0.25, now - _lastT));
+            _lastT = now;
+            double pos = Position(linear);
+            double tau = pos > Level ? AttackTau : ReleaseTau;
+            // 取 3 位小数：数值不变时控件不重绘
+            Level = Math.Round(Level + (pos - Level) * (1 - Math.Exp(-dt / tau)), 3);
             if (Level >= Peak) { Peak = Level; _peakT = now; }
-            else if (now - _peakT > 0.9) Peak = Math.Max(Level, Peak - 0.012);
-            if (pos > 0.25) _soundT = now;           // 高于约 -45dB 视为“有声音”
-            HasSound = now - _soundT < 0.4;
+            else if (now - _peakT > PeakHold) Peak = Math.Round(Math.Max(Level, Peak - PeakFall * dt), 3);
+        }
+
+        /// <summary>线性幅度 → 电平表位置（IEC 60268-18 刻度，0dB 满格，-70dB 以下为 0）。</summary>
+        public static double Position(float linear)
+        {
+            if (!(linear > 1e-6f)) return 0;
+            double db = 20 * Math.Log10(linear);
+            if (db < -70) return 0;
+            if (db < -60) return (db + 70) * 0.0025;
+            if (db < -50) return (db + 60) * 0.005 + 0.025;
+            if (db < -40) return (db + 50) * 0.0075 + 0.075;
+            if (db < -30) return (db + 40) * 0.015 + 0.15;
+            if (db < -20) return (db + 30) * 0.02 + 0.30;
+            if (db < 0) return (db + 20) * 0.025 + 0.50;
+            return 1;
         }
     }
 
@@ -73,7 +99,8 @@ namespace ShengJi
         {
             Settings = settings;
             _ui = Dispatcher.CurrentDispatcher;
-            _timer = new DispatcherTimer(DispatcherPriority.Render, _ui) { Interval = TimeSpan.FromMilliseconds(33) };
+            // 15ms 实际约 64 次/秒（系统定时器粒度 15.6ms；设 33ms 实际只有约 21 次/秒）
+            _timer = new DispatcherTimer(DispatcherPriority.Render, _ui) { Interval = TimeSpan.FromMilliseconds(15) };
             _timer.Tick += (s, e) => Tick();
         }
 
@@ -86,6 +113,7 @@ namespace ShengJi
             Engine.Notice += (msg, kind) => _ui.BeginInvoke(new Action(() => Notice?.Invoke(msg, kind)));
             Engine.StatusChanged += () => _ui.BeginInvoke(new Action(() => SourceStatusChanged?.Invoke()));
             ApplyAudioSettings();
+            ApplyAlignment();
             Engine.Start();
             _timer.Start();
             _hotkeys = new HotkeyManager();
@@ -324,8 +352,63 @@ namespace ShengJi
         }
 
         // ------------------------------------------------------------------
+        //  人声对齐
+        // ------------------------------------------------------------------
+
+        private void ApplyAlignment()
+        {
+            var table = Settings.Alignments.ToDictionary(a => AudioEngine.AlignKey(a.Render, a.Mic), a => a.Ms);
+            Engine.SetAlignment(table, AppSettings.DefaultAlignMs);
+        }
+
+        /// <summary>当前收听设备和麦克风都已知时才能对齐 / 校准。</summary>
+        public bool AlignAvailable => Engine.AlignRenderId != null && Engine.AlignMicId != null;
+
+        /// <summary>当前设备组合保存的记录；null = 没记录（用默认值）。</summary>
+        public AlignEntry CurrentAlign => AlignAvailable ? Settings.FindAlign(Engine.AlignRenderId, Engine.AlignMicId) : null;
+
+        public int CurrentAlignMs => CurrentAlign?.Ms ?? AppSettings.DefaultAlignMs;
+
+        public void SetAlignManual(int ms)
+        {
+            if (!AlignAvailable) return;
+            Settings.SetAlign(Engine.AlignRenderId, Engine.AlignMicId, ms, calibrated: false);
+            Settings.Save();
+            ApplyAlignment();
+        }
+
+        public bool IsCalibrating { get; private set; }
+
+        /// <summary>对当前设备组合做一次校准（约 7 秒），成功则保存并立即生效。</summary>
+        public async Task<CalibrationResult> CalibrateAsync()
+        {
+            string render = Engine.AlignRenderId, mic = Engine.AlignMicId;
+            IsCalibrating = true;
+            try
+            {
+                var r = await Task.Run(() => AlignmentCalibrator.Run(render, mic, CancellationToken.None));
+                Log.Info($"人声对齐校准: {(r.Ok ? r.Ms + "ms" : "失败 " + r.Error)}；{r.Detail}");
+                if (r.Ok)
+                {
+                    Settings.SetAlign(render, mic, r.Ms, calibrated: true);
+                    Settings.Save();
+                    ApplyAlignment();
+                }
+                return r;
+            }
+            finally { IsCalibrating = false; }
+        }
+
+        // ------------------------------------------------------------------
         //  电平刷新
         // ------------------------------------------------------------------
+
+        /// <summary>窗口可见时高频刷新电平，只剩托盘时降频省电（电平计算按真实时间，不受频率影响）。</summary>
+        public void SetMeterRate(bool fast)
+        {
+            var iv = TimeSpan.FromMilliseconds(fast ? 15 : 60);
+            if (_timer.Interval != iv) _timer.Interval = iv;
+        }
 
         private void Tick()
         {

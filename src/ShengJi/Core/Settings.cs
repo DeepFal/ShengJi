@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -25,6 +26,11 @@ namespace ShengJi.Core
         public bool SplitTracks = false;
         public int SegmentMinutes = 0;         // 0 = 不分段
 
+        // 人声对齐：按「收听设备 + 麦克风」组合保存的补偿值；没有记录的组合用 DefaultAlignMs
+        public List<AlignEntry> Alignments = new List<AlignEntry>();
+        /// <summary>未校准时的经验值（常见 2.4G 无线耳麦约 100ms）。</summary>
+        public const int DefaultAlignMs = 100;
+
         // 文件
         public string OutputDir;
         public string FileNameTemplate = "{日期}_{时间}_{备注}";
@@ -40,6 +46,19 @@ namespace ShengJi.Core
         public double MainTop = double.NaN;
         public double MiniLeft = double.NaN;
         public double MiniTop = double.NaN;
+
+        public AlignEntry FindAlign(string renderId, string micId) =>
+            Alignments.FirstOrDefault(a => a.Render == renderId && a.Mic == micId);
+
+        public void SetAlign(string renderId, string micId, int ms, bool calibrated)
+        {
+            var e = FindAlign(renderId, micId);
+            if (e == null) Alignments.Add(e = new AlignEntry { Render = renderId, Mic = micId });
+            e.Ms = Clamp(ms, 0, MaxAlignMs);
+            e.Calibrated = calibrated;
+        }
+
+        public const int MaxAlignMs = 1000;
 
         [XmlIgnore]
         public string EffectiveOutputDir => string.IsNullOrWhiteSpace(OutputDir) ? Paths.DefaultOutputDir : OutputDir;
@@ -104,9 +123,23 @@ namespace ShengJi.Core
             if (string.IsNullOrWhiteSpace(FileNameTemplate)) FileNameTemplate = "{日期}_{时间}_{备注}";
             if (string.IsNullOrWhiteSpace(HotkeyToggle)) HotkeyToggle = "";
             if (string.IsNullOrWhiteSpace(HotkeyPause)) HotkeyPause = "";
+            if (Alignments == null) Alignments = new List<AlignEntry>();
+            Alignments = Alignments
+                .Where(a => a != null && !string.IsNullOrEmpty(a.Render) && !string.IsNullOrEmpty(a.Mic))
+                .GroupBy(a => a.Render + "|" + a.Mic).Select(g => g.Last()).ToList();
+            foreach (var a in Alignments) a.Ms = Clamp(a.Ms, 0, MaxAlignMs);
         }
 
         private static int Clamp(int v, int lo, int hi) => v < lo ? lo : v > hi ? hi : v;
+    }
+
+    /// <summary>一组「收听设备 + 麦克风」的人声对齐补偿值。</summary>
+    public class AlignEntry
+    {
+        [XmlAttribute] public string Render;
+        [XmlAttribute] public string Mic;
+        [XmlAttribute] public int Ms;
+        [XmlAttribute] public bool Calibrated;   // false = 手动填写
     }
 
     /// <summary>录音文件命名。</summary>
