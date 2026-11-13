@@ -14,9 +14,8 @@ namespace ShengJi
     internal enum RecState { Idle, Recording, Paused }
 
     /// <summary>
-    /// 电平表的显示状态。输入是短时响度（见 <see cref="AudioEngine.ReadLevels"/>），
-    /// 按 IEC 60268-18 电平表刻度换算成 0..1：-20dB 以上刻度舒展、往下逐级压缩，
-    /// 正常说话在中段，轻声 / 大声差别明显，底噪几乎不亮。
+    /// 电平表的显示状态。输入是短时响度（见 <see cref="AudioEngine.ReadLevels"/>），换算成 0..1 的显示位置。
+    /// 刻度按听感定（见 <see cref="Position"/>）：正常说话约 2/3，喊叫接近满格，轻声 / 大声差别明显，底噪几乎不亮。
     /// 上升快、回落平滑，按实际经过的时间计算（与刷新频率无关）；另有峰值保持标记。
     /// </summary>
     internal sealed class MeterState
@@ -40,18 +39,22 @@ namespace ShengJi
             else if (now - _peakT > PeakHold) Peak = Math.Round(Math.Max(Level, Peak - PeakFall * dt), 3);
         }
 
-        /// <summary>线性幅度 → 电平表位置（IEC 60268-18 刻度，0dB 满格，-70dB 以下为 0）。</summary>
+        // 刻度定点（短时响度 dB → 位置），点之间线性插值。
+        // 参照 IEC 60268-18 “上段舒展、下段压缩”的分段思路，但按实际能达到的电平定满格：
+        // 声音在 Windows 音量之后才被采集，戴耳机时音量通常不高，正常说话 / 音乐的短时响度多在 -30~-20，
+        // 喊叫约 -20，-14 以上已经很响。上半段约 2.6%/dB，6dB（听感约 1.5 倍响）≈ 16% 格。
+        private static readonly double[] ScaleDb  = { -65, -55, -45, -35, -26, -20, -14 };
+        private static readonly double[] ScalePos = {   0, 0.05, 0.20, 0.45, 0.68, 0.84, 1.00 };
+
+        /// <summary>线性幅度（短时响度）→ 电平表位置 0..1。</summary>
         public static double Position(float linear)
         {
             if (!(linear > 1e-6f)) return 0;
             double db = 20 * Math.Log10(linear);
-            if (db < -70) return 0;
-            if (db < -60) return (db + 70) * 0.0025;
-            if (db < -50) return (db + 60) * 0.005 + 0.025;
-            if (db < -40) return (db + 50) * 0.0075 + 0.075;
-            if (db < -30) return (db + 40) * 0.015 + 0.15;
-            if (db < -20) return (db + 30) * 0.02 + 0.30;
-            if (db < 0) return (db + 20) * 0.025 + 0.50;
+            if (db <= ScaleDb[0]) return 0;
+            for (int i = 1; i < ScaleDb.Length; i++)
+                if (db < ScaleDb[i])
+                    return ScalePos[i - 1] + (db - ScaleDb[i - 1]) / (ScaleDb[i] - ScaleDb[i - 1]) * (ScalePos[i] - ScalePos[i - 1]);
             return 1;
         }
     }

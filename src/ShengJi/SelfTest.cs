@@ -268,9 +268,13 @@ namespace ShengJi
             silent.Process(new float[9600], 4800);
             Check(silent.Read() == 0, "静音时读数为 0");
 
-            double p20 = MeterState.Position((float)Math.Pow(10, -20 / 20.0)), p40 = MeterState.Position((float)Math.Pow(10, -40 / 20.0));
-            Check(Math.Abs(p20 - 0.5) < 1e-6 && Math.Abs(p40 - 0.15) < 1e-6 && MeterState.Position(1f) == 1 && MeterState.Position(0f) == 0,
-                  "电平表刻度符合 IEC 60268-18（-20dB 在 50%，-40dB 在 15%）");
+            Func<double, double> pos = db => MeterState.Position((float)Math.Pow(10, db / 20.0));
+            bool mono = true;
+            for (double db = -70; db < -10; db += 0.5) if (pos(db + 0.5) < pos(db)) mono = false;
+            Line($"电平表刻度: 喊叫(-20) {pos(-20):P0}  正常说话(-26) {pos(-26):P0}  轻声(-35) {pos(-35):P0}  底噪(-55) {pos(-55):P0}  -14 {pos(-14):P0}");
+            Check(mono && Math.Abs(pos(-20) - 0.84) < 1e-6 && Math.Abs(pos(-26) - 0.68) < 1e-6 && Math.Abs(pos(-30.5) - 0.565) < 1e-6
+                  && pos(-14) == 1 && pos(-65) == 0 && pos(0) == 1 && MeterState.Position(0f) == 0,
+                  "电平表刻度：单调，正常说话约 2/3、喊叫接近满格、底噪几乎不亮");
         }
 
         /// <summary>校准算法：合成信号里已知延迟能被准确测出；没有提示音时不会误报。</summary>

@@ -153,9 +153,10 @@ namespace ShengJi.UI
             {
                 double x = i / 100.0;
                 Color c;
-                if (x <= 0.66) c = green;
-                else if (x <= 0.80) c = Lerp(green, yellow, (x - 0.66) / 0.14);
-                else if (x <= 0.94) c = Lerp(yellow, red, (x - 0.80) / 0.14);
+                // 正常音量为绿色，大声（约 -22dB 以上）渐变为黄，很响（约 -16dB 以上）才到红
+                if (x <= 0.72) c = green;
+                else if (x <= 0.86) c = Lerp(green, yellow, (x - 0.72) / 0.14);
+                else if (x <= 0.96) c = Lerp(yellow, red, (x - 0.86) / 0.10);
                 else c = red;
                 r[i] = Frozen(c);
             }
