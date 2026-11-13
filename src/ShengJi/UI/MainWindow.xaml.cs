@@ -127,7 +127,7 @@ namespace ShengJi.UI
                 if (e.Key == Key.Escape)
                 {
                     if (PickerPopup.IsOpen) PickerPopup.IsOpen = false;
-                    else if (SettingsPanel.Visibility == Visibility.Visible) ShowSettings(false);
+                    else if (_settingsOpen) ShowSettings(false);
                 }
             };
 
@@ -492,22 +492,29 @@ namespace ShengJi.UI
         //  设置面板
         // ==================================================================
 
+        private bool _settingsOpen;
+
         private void ShowSettings(bool show)
         {
+            // 已经是目标状态（例如设置页开着时再点齿轮、连按两次 Esc）：不重播动画
+            if (show == _settingsOpen) return;
+            _settingsOpen = show;
             PickerPopup.IsOpen = false;
             var d = new Duration(TimeSpan.FromMilliseconds(240));
             var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            // 从面板当前位置开始（收起动画没播完又打开时不会跳）
+            double from = SettingsPanel.Visibility == Visibility.Visible ? SettingsShift.X : ActualWidth;
             if (show)
             {
                 LoadSettingsToUi();
                 SettingsPanel.Visibility = Visibility.Visible;
-                SettingsShift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(ActualWidth, 0, d) { EasingFunction = ease });
+                SettingsShift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(from, 0, d) { EasingFunction = ease });
             }
             else
             {
                 Keyboard.ClearFocus();
-                var a = new DoubleAnimation(0, ActualWidth, d) { EasingFunction = ease };
-                a.Completed += (s, e) => SettingsPanel.Visibility = Visibility.Collapsed;
+                var a = new DoubleAnimation(from, ActualWidth, d) { EasingFunction = ease };
+                a.Completed += (s, e) => { if (!_settingsOpen) SettingsPanel.Visibility = Visibility.Collapsed; };
                 SettingsShift.BeginAnimation(TranslateTransform.XProperty, a);
                 _c.Settings.Save();
                 UpdateRecordUi();
