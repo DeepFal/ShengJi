@@ -1,0 +1,162 @@
+name: 编译与发布
+
+# 推送到 main：编译 + 界面自检；如果程序文件（src / installer / docs / build.ps1）自上个版本以来有改动，
+#             自动把修订号 +1（v1.0.1 → v1.0.2），打标签并发布 Release。
+# 手动运行（Actions → 编译与发布 → Run workflow）：按选择的 patch / minor / major 递增并发布。
+# Pull Request：只编译和自检，不发布。提交信息里写 [skip ci] 可跳过本次运行。
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'LICENSE', '.github/dependabot.yml']
+  pull_request:
+    paths-ignore: ['**.md', 'LICENSE', '.github/dependabot.yml']
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 版本号递增方式
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+permissions:
+  contents: read
+
+# main 上的运行依次排队，避免两次发布抢同一个版本号
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: 编译 · 自检 · 发布
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write   # 创建标签和 Release
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # 需要完整历史和标签来计算版本号
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: 计算版本号
+        id: ver
+        shell: bash
+        env:
+          BUMP: ${{ inputs.bump || 'patch' }}
+        run: |
+          last=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)
+          cur=${last#v}
+          IFS=. read -r major minor patch <<< "${cur:-0.0.0}"
+          case "$BUMP" in
+            major) next="$((major + 1)).0.0" ;;
+            minor) next="$major.$((minor + 1)).0" ;;
+            *)     next="$major.$minor.$((patch + 1))" ;;
+          esac
+
+          release=false
+          if [ "$GITHUB_REF" = refs/heads/main ]; then
+            if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+              release=true
+            elif [ "$GITHUB_EVENT_NAME" = push ]; then
+              if [ -z "$last" ] || ! git diff --quiet "$last" HEAD -- src installer docs build.ps1; then
+                release=true
+              fi
+            fi
+          fi
+
+          echo "last=$last"       >> "$GITHUB_OUTPUT"
+          echo "version=$next"    >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "上个版本 ${last:-无}，本次 v$next，发布：$release"
+          {
+            echo "### 声记 v$next"
+            echo "上个版本：${last:-无}　发布 Release：$release"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 准备 Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: 编译并打包
+        shell: powershell   # 与本地一致，用 Windows PowerShell 5.1 运行
+        run: ./build.ps1 -Version ${{ steps.ver.outputs.version }}
+
+      - name: 界面自检（启动程序，渲染各界面截图后自动退出）
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist/build -Filter *.exe | Select-Object -First 1
+          $out = Join-Path $env:RUNNER_TEMP 'ui-shot'
+          $p = Start-Process $exe.FullName -ArgumentList '--ui-shot', $out -PassThru
+          $null = $p.Handle   # 先拿到句柄，退出后才能读到退出码
+          if (-not $p.WaitForExit(180000)) { $p.Kill(); throw '程序 3 分钟内没有退出' }
+          $png = @(Get-ChildItem $out -Filter *.png -ErrorAction SilentlyContinue)
+          "退出码 $($p.ExitCode)，截图 $($png.Count) 张：$($png.Name -join ', ')"
+          if ($p.ExitCode -ne 0) { throw "程序退出码 $($p.ExitCode)" }
+          if ($png.Count -lt 8) { throw '截图不全，程序可能在某个界面出错了' }
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@v7
+        with:
+          name: ShengJi-v${{ steps.ver.outputs.version }}
+          path: |
+            dist/*.exe
+            dist/*.zip
+          if-no-files-found: error
+
+      - name: 上传界面截图
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-shot-v${{ steps.ver.outputs.version }}
+          path: ${{ runner.temp }}/ui-shot/*.png
+          if-no-files-found: ignore
+
+      - name: 发布 Release
+        if: steps.ver.outputs.release == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          LAST: ${{ steps.ver.outputs.last }}
+        run: |
+          tag="v$VERSION"
+          # 附件名用英文：GitHub 会把文件名里的中文字符去掉
+          mkdir release
+          cp dist/*.exe "release/ShengJi_${tag}_Setup.exe"
+          cp dist/*.zip "release/ShengJi_${tag}_Portable.zip"
+
+          if [ -n "$LAST" ]; then range="$LAST..HEAD"; else range=HEAD; fi
+          changes=$(git log "$range" --no-merges --format='- %s' -- src installer docs build.ps1)
+          {
+            echo "## 更新内容"
+            echo "${changes:-- 维护更新}"
+            echo
+            echo "## 下载"
+            echo "- **ShengJi_${tag}_Setup.exe**：安装版，双击安装，不需要管理员权限"
+            echo "- **ShengJi_${tag}_Portable.zip**：便携版，解压即用，设置保存在程序文件夹里"
+            echo
+            echo "程序没有数字签名，首次运行如果提示“Windows 已保护你的电脑”，点“更多信息 → 仍要运行”。"
+            echo
+            echo "<details><summary>SHA-256</summary>"
+            echo
+            echo '```'
+            (cd release && sha256sum *)
+            echo '```'
+            echo "</details>"
+          } > notes.md
+
+          gh release create "$tag" release/* --target "$GITHUB_SHA" --title "声记 $tag" --notes-file notes.md
+          echo "已发布 [$tag](https://github.com/$GITHUB_REPOSITORY/releases/tag/$tag)" >> "$GITHUB_STEP_SUMMARY"

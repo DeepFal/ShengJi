@@ -1,0 +1,7 @@
+# 每月检查一次工作流里用到的 GitHub Actions 是否有新版本，有就自动开 PR
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

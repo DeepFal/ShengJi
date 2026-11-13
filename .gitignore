@@ -6,3 +6,6 @@ obj/
 
 # 打包产物（运行 build.ps1 重新生成）
 dist/
+
+# 早期界面原型（仅本地保留，不公开）
+prototype/
